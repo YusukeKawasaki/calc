@@ -5,7 +5,10 @@ from tqdm import tqdm
 global count
 count = 0
 
-def is_significant(x):
+def is_significant(x) -> bool:
+    """
+    計算結果として有意な値か否か
+    """
     big = 300000
     floatok = False
     round=lambda x:(x*2+1)//2 #四捨五入
@@ -37,10 +40,17 @@ def pow_big(x, y):
     return False
 
 class Charactors():
-    def __init__(self, CharactorList, is_root = False, position = (0, 0)):
+    '''
+    数字の列。C。
+    これに演算子を加えてFormula(式)とMember(項)を作る。
+    部分列(c_parts)も同様にCharactorsで定義される。
+    CharactorList: strのリスト
+    isroot: 列全体ならTrue, 部分列ならFalse
+    position: 部分列の位置, (int, int)
+    '''
+    def __init__(self, CharactorList, is_root = True, position = None):
         self.list = CharactorList
         self.len = len(self.list)
-        self.issolve = False
 
         self.formulas = []
         self.members = []
@@ -50,18 +60,18 @@ class Charactors():
 
         if is_root:
             self.position = (0, self.len)
-            global c_childs
-            c_childs = [[None for i in range(self.len+1)] for j in range(self.len+1)]
+            global c_parts
+            c_parts = [[None for i in range(self.len+1)] for j in range(self.len+1)]
             for i in range(self.len):
                 for j in range(self.len+1):
                     if i < j:
-                        c_childs[i][j] = Charactors(self.list[i:j], position = (i, j))
+                        c_parts[i][j] = Charactors(self.list[i:j], position = (i, j), is_root=False)
             for k in range(1, self.len):
                 for i in range(self.len):
                     for j in range(self.len+1):
                         if j - i == k:
-                            c_childs[i][j].solve_m()
-                            c_childs[i][j].solve_f()
+                            c_parts[i][j].solve_m()
+                            c_parts[i][j].solve_f()
             self.solve_f()
             self.solve_m()
 
@@ -69,12 +79,11 @@ class Charactors():
         if self.formulas:
             return 0
         if self.len > 1:
-            splits = self.split() #自身を分割したCのリスト座標のリスト、自身を除く
+            splits = self.split() #自身を分割したCのpositionのリスト、自身を除く
             for positions in splits:
-                for M_product in list(itertools.product(*[c_childs[i][j].members for i, j in positions])):
+                for M_product in list(itertools.product(*[c_parts[i][j].members for i, j in positions])):
                     F = make_formula(M_product)
                     self.formulas.append(F)
-            print(self.position, 'F', count)
             self.formulas = remove_dup(self.formulas)
 
     def solve_m(self):
@@ -86,17 +95,20 @@ class Charactors():
         if self.len > 1:
             cuts = self.cut() #自身を2分割したCのリスト座標のリスト
             for positions in cuts:
-                for FM_product in list(itertools.product(*[c_childs[i][j].formulas + c_childs[i][j].members for i, j in positions])):
+                for FM_product in list(itertools.product(*[c_parts[i][j].formulas + c_parts[i][j].members for i, j in positions])):
                     Ms = make_member(FM_product, num = 2)
                     self.members += Ms
             for F in self.formulas: #Fに対して一項演算子をかけたもの
                 Ms = make_member(F, num = 1)
                 self.members += Ms
-            print(self.position, 'M', count)
             self.members = remove_dup(self.members)
     
     def split(self):
-        ''' start と end の間にある整数のうちどれかを採用してどれかを採用しない、その組を全て求める
+        '''
+        イメージ　0 1 2 3 4 -> 0 1|2 3|4
+        出力：[(0, 2), (2, 4), (4, 5)] のような組み合わせ全てのリスト
+
+        start と end の間にある整数のうちどれかを採用してどれかを採用しない、その組を全て求める
         → start+1からend-1までの整数の列からなる列を全て出力し、startとendを加えたものを用意
         → しりとりして出力 '''
         ans = []
@@ -112,6 +124,11 @@ class Charactors():
         return ans
 
     def cut(self):
+        '''
+        イメージ　0 1 2 3 4 -> 0 1|2 3 4
+        出力：[(0, 2), (2, 5)] のような二分割の組み合わせ全てのリスト
+        '''
+
         ans = []
         for i in range(self.position[0]+1, self.position[1]):
             ans.append([(self.position[0], i), (i, self.position[1])])
@@ -191,11 +208,11 @@ def make_formula(members):
 
 def make_member(arg, num):
     Ms = []
-    if num == 1:#F単体の場合
+    if num == 1: #F単体の場合
         F = arg
         Ms.append(Member('-{}'.format(F.b_label), need_brackets = True, weight = F.weight + 1)) #負にする +1の重み
-        Ms.append(Member('s({})'.format(F.b_label), need_brackets = False, weight = F.weight + 100)) #平方根にする +2の重み
-        Ms.append(Member('f({})'.format(F.b_label), need_brackets = False, weight = F.weight + 100)) #階乗にする +2の重み
+        Ms.append(Member('s({})'.format(F.b_label), need_brackets = False, weight = F.weight + 100)) #平方根にする +100の重み
+        Ms.append(Member('f({})'.format(F.b_label), need_brackets = False, weight = F.weight + 100)) #階乗にする +100の重み
     else: #2つの要素がある場合
         (F1, F2) = (arg[0], arg[1])
         weight = F1.weight + F2.weight
@@ -219,7 +236,7 @@ def remove_dup(FM_list):
     return ans
 
 l = ['1', '2', '3', '4', '5', '6', '7', '8', '9']
-C = Charactors(l, is_root = True)
+C = Charactors(l)
 ans = C.formulas + C.members
 ans = remove_dup(ans)
 for F in ans:
